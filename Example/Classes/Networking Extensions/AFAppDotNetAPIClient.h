@@ -22,7 +22,9 @@
 
 #import <Foundation/Foundation.h>
 @import AFNetworking;
-
+/**
+  网络代理类  网络请求工具
+ */
 @interface AFAppDotNetAPIClient : AFHTTPSessionManager
 
 + (instancetype)sharedClient;

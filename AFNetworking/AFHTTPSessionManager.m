@@ -47,6 +47,7 @@
 @implementation AFHTTPSessionManager
 @dynamic responseSerializer;
 
+//这个方法并不是 单类 内部调用了 initWithBaseURL
 + (instancetype)manager {
     return [[[self class] alloc] initWithBaseURL:nil];
 }
@@ -78,7 +79,29 @@
 
     self.baseURL = url;
 
+    
+    
+    //[AFN框架结构](http://www.jianshu.com/p/9ac3399c97af)
+    //[AFN框架结构2](http://www.jianshu.com/p/bea6ab5f493a)
+    
+//初始化时 会附带 初始化 AFHTTPRequestSerializer  和AFJSONResponseSerializer
+    
+    //请求 序列化
+    //AFJSONRequestSerializer           json
+    //AFPropertyListRequestSerializern  plist
+    //默认 请求数据是二进制
     self.requestSerializer = [AFHTTPRequestSerializer serializer];
+    
+    
+    
+    //响应序列化
+    //AFXMLParserResponseSerializer     XML
+    //AFXMLDocumentResponseSerializer   XMLDocument
+    //AFPropertyListResponseSerializer  Plist
+    //AFImageResponseSerializer         image
+    //AFCompoundResponseSerializer      compound
+    //AFJSONResponseSerializer          json
+    //默认响应数据是json
     self.responseSerializer = [AFJSONResponseSerializer serializer];
 
     return self;
@@ -264,6 +287,8 @@
     return dataTask;
 }
 
+
+//所有的get post head 方法都是在调用这个方法
 - (NSURLSessionDataTask *)dataTaskWithHTTPMethod:(NSString *)method
                                        URLString:(NSString *)URLString
                                       parameters:(id)parameters
@@ -272,8 +297,16 @@
                                          success:(void (^)(NSURLSessionDataTask *, id))success
                                          failure:(void (^)(NSURLSessionDataTask *, NSError *))failure
 {
+    //序列化 错误
     NSError *serializationError = nil;
+    //创建 Request   self.requestSerializer什么时候 创建的?
+    //-------------------------------------------- | -----
+    //-------------------------------------------- | -----
+    //-------------------------------------------- | -----
+    //-------------------------------------------- v -----
+    //*******************************************初始化的时候创建的
     NSMutableURLRequest *request = [self.requestSerializer requestWithMethod:method URLString:[[NSURL URLWithString:URLString relativeToURL:self.baseURL] absoluteString] parameters:parameters error:&serializationError];
+    //如果序列化 出错
     if (serializationError) {
         if (failure) {
             dispatch_async(self.completionQueue ?: dispatch_get_main_queue(), ^{

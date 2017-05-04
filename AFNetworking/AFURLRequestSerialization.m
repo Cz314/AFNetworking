@@ -43,6 +43,11 @@ typedef NSString * (^AFQueryStringSerializationBlock)(NSURLRequest *request, id 
  should be percent-escaped in the query string.
     - parameter string: The string to be percent-escaped.
     - returns: The percent-escaped string.
+ 
+ 
+ 这是很经典的一个方法:
+ 百分号编码 
+ 
  */
 NSString * AFPercentEscapedStringFromString(NSString *string) {
     static NSString * const kAFCharactersGeneralDelimitersToEncode = @":#[]@"; // does not include "?" or "/" due to RFC 3986 - Section 3.4
@@ -78,12 +83,20 @@ NSString * AFPercentEscapedStringFromString(NSString *string) {
 
 #pragma mark -
 
+/**
+ 查询参数 类
+ */
 @interface AFQueryStringPair : NSObject
 @property (readwrite, nonatomic, strong) id field;
 @property (readwrite, nonatomic, strong) id value;
 
 - (instancetype)initWithField:(id)field value:(id)value;
 
+/**
+ URL 编码 把非 ASCII 码 转化为 (百分号的编码格式) ASCII 码 可识别的形式
+
+ @return 服务器 可识别 的查询字符串
+ */
 - (NSString *)URLEncodedStringValue;
 @end
 
@@ -116,6 +129,7 @@ NSString * AFPercentEscapedStringFromString(NSString *string) {
 FOUNDATION_EXPORT NSArray * AFQueryStringPairsFromDictionary(NSDictionary *dictionary);
 FOUNDATION_EXPORT NSArray * AFQueryStringPairsFromKeyAndValue(NSString *key, id value);
 
+//拼接 查询参数
 NSString * AFQueryStringFromParameters(NSDictionary *parameters) {
     NSMutableArray *mutablePairs = [NSMutableArray array];
     for (AFQueryStringPair *pair in AFQueryStringPairsFromDictionary(parameters)) {
@@ -125,13 +139,17 @@ NSString * AFQueryStringFromParameters(NSDictionary *parameters) {
     return [mutablePairs componentsJoinedByString:@"&"];
 }
 
+/// 装有 AFQueryStringPair 对象的数组
 NSArray * AFQueryStringPairsFromDictionary(NSDictionary *dictionary) {
     return AFQueryStringPairsFromKeyAndValue(nil, dictionary);
 }
 
+/// 装有 AFQueryStringPair 对象的数组
 NSArray * AFQueryStringPairsFromKeyAndValue(NSString *key, id value) {
+    
     NSMutableArray *mutableQueryStringComponents = [NSMutableArray array];
 
+    /// 排序
     NSSortDescriptor *sortDescriptor = [NSSortDescriptor sortDescriptorWithKey:@"description" ascending:YES selector:@selector(compare:)];
 
     if ([value isKindOfClass:[NSDictionary class]]) {
@@ -171,6 +189,7 @@ NSArray * AFQueryStringPairsFromKeyAndValue(NSString *key, id value) {
 
 #pragma mark -
 
+//获取 自己的属性数组
 static NSArray * AFHTTPRequestSerializerObservedKeyPaths() {
     static NSArray *_AFHTTPRequestSerializerObservedKeyPaths = nil;
     static dispatch_once_t onceToken;
@@ -180,7 +199,8 @@ static NSArray * AFHTTPRequestSerializerObservedKeyPaths() {
 
     return _AFHTTPRequestSerializerObservedKeyPaths;
 }
-
+//还可以这样!!!!!
+//void *key = &key
 static void *AFHTTPRequestSerializerObserverContext = &AFHTTPRequestSerializerObserverContext;
 
 @interface AFHTTPRequestSerializer ()
@@ -203,11 +223,21 @@ static void *AFHTTPRequestSerializerObserverContext = &AFHTTPRequestSerializerOb
         return nil;
     }
 
+    //编码模式
     self.stringEncoding = NSUTF8StringEncoding;
 
+    
+    
+    
+    /*************下面 配合请求头****************/
+    //Request 头部初始化
     self.mutableHTTPRequestHeaders = [NSMutableDictionary dictionary];
+    //Request 头部 修改队列 并发
     self.requestHeaderModificationQueue = dispatch_queue_create("requestHeaderModificationQueue", DISPATCH_QUEUE_CONCURRENT);
 
+    
+    //获取 Accept-Language 和权重 q
+    //如:Accept-Language: zh-cn,zh;q=0.5
     // Accept-Language HTTP Header; see http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.4
     NSMutableArray *acceptLanguagesComponents = [NSMutableArray array];
     [[NSLocale preferredLanguages] enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
@@ -215,19 +245,48 @@ static void *AFHTTPRequestSerializerObserverContext = &AFHTTPRequestSerializerOb
         [acceptLanguagesComponents addObject:[NSString stringWithFormat:@"%@;q=%0.1g", obj, q]];
         *stop = q <= 0.5f;
     }];
+    //设置Accept-Language
     [self setValue:[acceptLanguagesComponents componentsJoinedByString:@", "] forHTTPHeaderField:@"Accept-Language"];
 
+    
+    //设置: User-Agent
+    ////打印: secretAgent = Mozilla/5.0 (iPhone; CPU iPhone OS 10_2 like Mac OS X) AppleWebKit/602.3.12 (KHTML, like Gecko) Mobile/14C89
+    //相关文章
+        // - [获取 UIWebview 的 Useragent，以及附加自定义字段到 Useragent](http://blog.csdn.net/mangosnow/article/details/38798195)
+        // - [浅谈iOS中的userAgent](http://www.jianshu.com/p/62b5becb557d)
+    
     NSString *userAgent = nil;
-#if TARGET_OS_IOS
+#if TARGET_OS_IOS   //iOS 系统
     // User-Agent Header; see http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.43
+    
+    //kCFBundleExecutableKey 项目名
+    //kCFBundleIdentifierKey bundleID
+    //CFBundleShortVersionString 版本号
+    //kCFBundleVersionKey  build 版本号
+    //model                 设备名称 如:iPhone
+    //systemVersion         iOS 系统版本
+    //scale                 屏幕比例因子
+    
+    /*
+     
+     用Charles 抓取自己的项目 得到的 User-Agent 如下
+     QRCodeCar/1.0.8 (iPhone; iOS 10.0.2; Scale/2.00)
+     DXCarManager/2.0.3 (iPhone; iOS 10.0.2; Scale/2.00)
+     项目名字(或者bundleID)/项目版本号(设备名称;系统版本;屏幕比例因子)
+     */
+    
     userAgent = [NSString stringWithFormat:@"%@/%@ (%@; iOS %@; Scale/%0.2f)", [[NSBundle mainBundle] infoDictionary][(__bridge NSString *)kCFBundleExecutableKey] ?: [[NSBundle mainBundle] infoDictionary][(__bridge NSString *)kCFBundleIdentifierKey], [[NSBundle mainBundle] infoDictionary][@"CFBundleShortVersionString"] ?: [[NSBundle mainBundle] infoDictionary][(__bridge NSString *)kCFBundleVersionKey], [[UIDevice currentDevice] model], [[UIDevice currentDevice] systemVersion], [[UIScreen mainScreen] scale]];
+    
 #elif TARGET_OS_WATCH
     // User-Agent Header; see http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.43
     userAgent = [NSString stringWithFormat:@"%@/%@ (%@; watchOS %@; Scale/%0.2f)", [[NSBundle mainBundle] infoDictionary][(__bridge NSString *)kCFBundleExecutableKey] ?: [[NSBundle mainBundle] infoDictionary][(__bridge NSString *)kCFBundleIdentifierKey], [[NSBundle mainBundle] infoDictionary][@"CFBundleShortVersionString"] ?: [[NSBundle mainBundle] infoDictionary][(__bridge NSString *)kCFBundleVersionKey], [[WKInterfaceDevice currentDevice] model], [[WKInterfaceDevice currentDevice] systemVersion], [[WKInterfaceDevice currentDevice] screenScale]];
 #elif defined(__MAC_OS_X_VERSION_MIN_REQUIRED)
     userAgent = [NSString stringWithFormat:@"%@/%@ (Mac OS X %@)", [[NSBundle mainBundle] infoDictionary][(__bridge NSString *)kCFBundleExecutableKey] ?: [[NSBundle mainBundle] infoDictionary][(__bridge NSString *)kCFBundleIdentifierKey], [[NSBundle mainBundle] infoDictionary][@"CFBundleShortVersionString"] ?: [[NSBundle mainBundle] infoDictionary][(__bridge NSString *)kCFBundleVersionKey], [[NSProcessInfo processInfo] operatingSystemVersionString]];
 #endif
+    
+    //字符转码 
     if (userAgent) {
+        //汉字 和表情  不能转成功
         if (![userAgent canBeConvertedToEncoding:NSASCIIStringEncoding]) {
             NSMutableString *mutableUserAgent = [userAgent mutableCopy];
             if (CFStringTransform((__bridge CFMutableStringRef)(mutableUserAgent), NULL, (__bridge CFStringRef)@"Any-Latin; Latin-ASCII; [:^ASCII:] Remove", false)) {
@@ -241,6 +300,8 @@ static void *AFHTTPRequestSerializerObserverContext = &AFHTTPRequestSerializerOb
     self.HTTPMethodsEncodingParametersInURI = [NSSet setWithObjects:@"GET", @"HEAD", @"DELETE", nil];
 
     self.mutableObservedChangedKeyPaths = [NSMutableSet set];
+    
+    //给自己的属性 添加观察者模式
     for (NSString *keyPath in AFHTTPRequestSerializerObservedKeyPaths()) {
         if ([self respondsToSelector:NSSelectorFromString(keyPath)]) {
             [self addObserver:self forKeyPath:keyPath options:NSKeyValueObservingOptionNew context:AFHTTPRequestSerializerObserverContext];
@@ -251,6 +312,7 @@ static void *AFHTTPRequestSerializerObserverContext = &AFHTTPRequestSerializerOb
 }
 
 - (void)dealloc {
+    //移除 观察者模式
     for (NSString *keyPath in AFHTTPRequestSerializerObservedKeyPaths()) {
         if ([self respondsToSelector:NSSelectorFromString(keyPath)]) {
             [self removeObserver:self forKeyPath:keyPath context:AFHTTPRequestSerializerObserverContext];
@@ -302,7 +364,9 @@ static void *AFHTTPRequestSerializerObserverContext = &AFHTTPRequestSerializerOb
 #pragma mark -
 
 - (NSDictionary *)HTTPRequestHeaders {
+    //局部变量 需要 用 __block 形容
     NSDictionary __block *value;
+    //同步+并发 提高线程优先级
     dispatch_sync(self.requestHeaderModificationQueue, ^{
         value = [NSDictionary dictionaryWithDictionary:self.mutableHTTPRequestHeaders];
     });
@@ -312,6 +376,7 @@ static void *AFHTTPRequestSerializerObserverContext = &AFHTTPRequestSerializerOb
 - (void)setValue:(NSString *)value
 forHTTPHeaderField:(NSString *)field
 {
+    //线程安全, 即使有多个线程 只有执行了下面的操作之后 才会执行其他操作
     dispatch_barrier_async(self.requestHeaderModificationQueue, ^{
         [self.mutableHTTPRequestHeaders setValue:value forKey:field];
     });
@@ -351,22 +416,29 @@ forHTTPHeaderField:(NSString *)field
 }
 
 #pragma mark -
-
+/// 创建一个网络请求类 NSMutableURLRequest
 - (NSMutableURLRequest *)requestWithMethod:(NSString *)method
                                  URLString:(NSString *)URLString
                                 parameters:(id)parameters
                                      error:(NSError *__autoreleasing *)error
 {
+    //method 不能为空
     NSParameterAssert(method);
+    //URLString 不能为空
     NSParameterAssert(URLString);
 
     NSURL *url = [NSURL URLWithString:URLString];
 
+    //url 不能为空
     NSParameterAssert(url);
 
+    //创建 Request
     NSMutableURLRequest *mutableRequest = [[NSMutableURLRequest alloc] initWithURL:url];
+    //配置 Request
     mutableRequest.HTTPMethod = method;
 
+    //该类初始化的时候, 对其中一些属性进行了观察者模式
+    //当这些属性有值的时候 把 这些值 赋值给 mutableRequest 相应的属性
     for (NSString *keyPath in AFHTTPRequestSerializerObservedKeyPaths()) {
         if ([self.mutableObservedChangedKeyPaths containsObject:keyPath]) {
             [mutableRequest setValue:[self valueForKeyPath:keyPath] forKey:keyPath];
@@ -470,25 +542,31 @@ forHTTPHeaderField:(NSString *)field
 }
 
 #pragma mark - AFURLRequestSerialization
-
+/// 创建网络 请求类 NSURLRequest
 - (NSURLRequest *)requestBySerializingRequest:(NSURLRequest *)request
                                withParameters:(id)parameters
                                         error:(NSError *__autoreleasing *)error
 {
+    //request 不能为空
     NSParameterAssert(request);
-
+    
     NSMutableURLRequest *mutableRequest = [request mutableCopy];
-
+    
     [self.HTTPRequestHeaders enumerateKeysAndObjectsUsingBlock:^(id field, id value, BOOL * __unused stop) {
+        //如果 field 还没有值 就给他设值
         if (![request valueForHTTPHeaderField:field]) {
             [mutableRequest setValue:value forHTTPHeaderField:field];
         }
     }];
 
     NSString *query = nil;
+    
+    // 拼接参数
     if (parameters) {
+        //这个 block 好像是用来做单元测试的
         if (self.queryStringSerialization) {
             NSError *serializationError;
+            //调用block
             query = self.queryStringSerialization(request, parameters, &serializationError);
 
             if (serializationError) {
@@ -501,12 +579,15 @@ forHTTPHeaderField:(NSString *)field
         } else {
             switch (self.queryStringSerializationStyle) {
                 case AFHTTPRequestQueryStringDefaultStyle:
+                    //拼接参数
                     query = AFQueryStringFromParameters(parameters);
                     break;
             }
         }
     }
-
+    
+//下面的都还没看...
+    
     if ([self.HTTPMethodsEncodingParametersInURI containsObject:[[request HTTPMethod] uppercaseString]]) {
         if (query && query.length > 0) {
             mutableRequest.URL = [NSURL URLWithString:[[mutableRequest.URL absoluteString] stringByAppendingFormat:mutableRequest.URL.query ? @"&%@" : @"?%@", query]];
@@ -552,6 +633,7 @@ forHTTPHeaderField:(NSString *)field
 #pragma mark - NSSecureCoding
 
 + (BOOL)supportsSecureCoding {
+    //关于归档接档 查看demo  MyCollectionAbility
     return YES;
 }
 
@@ -561,7 +643,19 @@ forHTTPHeaderField:(NSString *)field
         return nil;
     }
 
+    //- [大神的博客关于 NSSecureCoding](http://nshipster.cn/nssecurecoding/)
+    //当 遵守协议<NSSecureCoding>
+    //并且方法 supportsSecureCoding 返回YES
+    //接档必须使用方法 : decodeObjectOfClass
+    //decodeObjectOfClass : 严格 限制类型安全 防止类型替换攻击
+    
+    //方法 supportsSecureCoding 返回NO
+    // 可使用方法 decodeObjectForKey 替换 decodeObjectOfClass
     self.mutableHTTPRequestHeaders = [[decoder decodeObjectOfClass:[NSDictionary class] forKey:NSStringFromSelector(@selector(mutableHTTPRequestHeaders))] mutableCopy];
+    
+    //使用属性做key 可以使用下面的方法
+    //NSStringFromSelector(@selector(queryStringSerializationStyle))
+
     self.queryStringSerializationStyle = (AFHTTPRequestQueryStringSerializationStyle)[[decoder decodeObjectOfClass:[NSNumber class] forKey:NSStringFromSelector(@selector(queryStringSerializationStyle))] unsignedIntegerValue];
 
     return self;

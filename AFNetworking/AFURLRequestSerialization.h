@@ -166,6 +166,7 @@ typedef NS_ENUM(NSUInteger, AFHTTPRequestQueryStringSerializationStyle) {
 
  @param field The HTTP header to set a default value for
  @param value The value set as default for the specified header, or `nil`
+ 设置请求头.  如果值为nil, 则移除对应key的值
  */
 - (void)setValue:(nullable NSString *)value
 forHTTPHeaderField:(NSString *)field;

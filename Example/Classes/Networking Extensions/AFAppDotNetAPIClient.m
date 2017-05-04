@@ -21,12 +21,13 @@
 // THE SOFTWARE.
 
 #import "AFAppDotNetAPIClient.h"
-
+//base url
 static NSString * const AFAppDotNetAPIBaseURLString = @"https://api.app.net/";
 
 @implementation AFAppDotNetAPIClient
 
 + (instancetype)sharedClient {
+    //单类
     static AFAppDotNetAPIClient *_sharedClient = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
